@@ -205,8 +205,9 @@ def myModel():
     model = Model(input_tensor,x)
     return model
 
-
-datagen = ImageDataGenerator(
+if __name__ == 'main':
+    # 数据初始化
+    datagen = ImageDataGenerator(
         featurewise_center=False,  # set input mean to 0 over the dataset
         samplewise_center=False,  # set each sample mean to 0
         featurewise_std_normalization=False,  # divide inputs by std of the dataset
@@ -217,31 +218,35 @@ datagen = ImageDataGenerator(
         height_shift_range=0.2,  # randomly shift images vertically (fraction of total height)
         horizontal_flip=True,  # randomly flip images
         vertical_flip=False)  # randomly flip images
-num_classes = 10
+    num_classes = 10
 
-model_name = 'd:/model/cifar10_FMP.h5'
-(x_train,y_train),(x_test,y_test) = cifar10.load_data()
-x_train = (x_train.astype('float32') - 127.5)/127.5
-x_test = (x_test.astype('float32') - 127.5)/127.5
+    model_name = 'd:/model/cifar10_FMP.h5'
+    (x_train, y_train), (x_test, y_test) = cifar10.load_data()
+    x_train = (x_train.astype('float32') - 127.5) / 127.5
+    x_test = (x_test.astype('float32') - 127.5) / 127.5
 
-y_train = keras.utils.to_categorical(y_train,num_classes)
-y_test = keras.utils.to_categorical(y_test,num_classes)
-a = []
-for ii in range(0,30):
-    if ii == 0:
-        model = myModel()
-    else:
-        model = load_model(model_name + '_' + str(ii-1))
-    model.compile(optimizer = SGD(1e-3),loss = 'categorical_crossentropy',metrics = ['categorical_accuracy'])
-    if ii == 0:
-        model = LSUVinit(model, x_train[:32, :, :, :])
-    tbCallBack = keras.callbacks.TensorBoard(log_dir='D:/Graph', histogram_freq=0, write_graph=True, write_images=True)
-    datagen.fit(x_train)
-    model.fit_generator(datagen.flow(x_train, y_train,batch_size=32),steps_per_epoch=x_train.shape[0] // 32,epochs = 1,shuffle = True,callbacks=[tbCallBack])
-    model.save(model_name+'_'+ str(ii))
+    y_train = keras.utils.to_categorical(y_train, num_classes)
+    y_test = keras.utils.to_categorical(y_test, num_classes)
+    a = []
+    for ii in range(0, 30):
+        if ii == 0:
+            model = myModel()
+        else:
+            model = load_model(model_name + '_' + str(ii - 1))
+        model.compile(optimizer=SGD(1e-3), loss='categorical_crossentropy', metrics=['categorical_accuracy'])
+        if ii == 0:
+            model = LSUVinit(model, x_train[:32, :, :, :])
+        tbCallBack = keras.callbacks.TensorBoard(log_dir='D:/Graph', histogram_freq=0, write_graph=True,
+                                                 write_images=True)
+        # 数据预处理
+        datagen.fit(x_train)
+        # keras 中 fit_generator参数steps_per_epoch已经改变含义了，目前的含义是一个epoch分成多少个batch_size。旧版的含义是一个epoch的样本数目。
+        model.fit_generator(datagen.flow(x_train, y_train, batch_size=32), steps_per_epoch=x_train.shape[0] // 32,
+                            epochs=1, shuffle=True, callbacks=[tbCallBack])
+        model.save(model_name + '_' + str(ii))
 
-    loss,accuracy = model.evaluate(x_test,y_test)
-    print('loss: {} accuracy:{}'.format(loss,accuracy))
-    a.append(str(accuracy) + '\n')
-    with open('d:/model/accurate.txt','w') as fw:
-        fw.writelines(a)
+        loss, accuracy = model.evaluate(x_test, y_test)
+        print('loss: {} accuracy:{}'.format(loss, accuracy))
+        a.append(str(accuracy) + '\n')
+        with open('d:/model/accurate.txt', 'w') as fw:
+            fw.writelines(a)
