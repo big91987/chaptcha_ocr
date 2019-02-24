@@ -2,8 +2,18 @@ import tensorflow
 
 from tensorflow.python import keras
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.python.keras.applications.resnet50 import ResNet50
+from tensorflow.python.keras.applications.mobilenet_v2 import MobileNetV2
+from tensorflow.python.keras.utils import plot_model
+from tensorflow.python.keras.optimizers import *
 from utils import *
-from cifar10 import *
+from tensorflow.python.keras.datasets import cifar10
+from tensorflow.python.keras.layers import Lambda,Dense,Dropout,Activation,Flatten,Input,Conv2D,AveragePooling2D,MaxPooling2D,GlobalAveragePooling2D,GlobalMaxPooling2D,BatchNormalization
+from tensorflow.python.keras.models import Model
+import os
+from tensorflow.python.keras.utils.vis_utils import plot_model
+from tensorflow.python.keras.callbacks import LearningRateScheduler
+# from cifar10 import *
 
 
 class M(type):
@@ -36,7 +46,7 @@ class BaseNN(object):
 
     def __init__(self):
         self.trainable = True
-        self.model     = 123
+        self.model     = None
         self.sess      = None
         self.input     = {}
         self.output    = {}
@@ -79,7 +89,7 @@ class trainable_NN(BaseNN):
     # impl net & train_op
     def build_model(self, build_func):
         # 注意python是传对象的引用，因此可以修改self的成员
-        self.model = build_func(self)
+        self.model = build_func()
         self.trainable = True
 
     def store(self, save_file_name):
@@ -108,6 +118,67 @@ class trainable_NN(BaseNN):
     def train(self, feed_dict):
         if self.framework == 'keras':
             assert self.model is not None
+
+def lr_schedule(epoch):
+
+    """Learning Rate Schedule
+
+
+
+    Learning rate is scheduled to be reduced after 80, 120, 160, 180 epochs.
+
+    Called automatically every epoch as part of callbacks during training.
+
+
+
+    # Arguments
+
+        epoch (int): The number of epochs
+
+
+
+    # Returns
+
+        lr (float32): learning rate
+
+    """
+
+    lr = 1e-3
+
+    if epoch > 180:
+
+        lr *= 0.5e-3
+
+    elif epoch > 160:
+
+        lr *= 1e-3
+
+    elif epoch > 120:
+
+        lr *= 1e-2
+
+    elif epoch > 80:
+
+        lr *= 1e-1
+
+    print('Learning rate: Learning rate: ', lr)
+
+    # lr_str = os.getenv('keras_lr')
+    # if lr_str is not None:
+    #     print('lr change to {}'.format(lr))
+    #     lr = float(lr_str)
+    # else:
+    #     print('not get env keras_lr, skip ... ')
+
+    with open('./keras_lr.txt', 'r') as f:
+        lr_str = f.read()
+        print('lr_str ====== {}'.format(lr_str))
+        lr = float(lr_str)
+        print('lr change to {}'.format(lr))
+
+    return lr
+
+lr_scheduler = LearningRateScheduler(lr_schedule)
 
 class MyCallBack(keras.callbacks.Callback):
     def __init__(self, val_set=[], nn=None, filepath ='', period=1, strategy='best'):
@@ -248,6 +319,77 @@ class keras_nn(BaseNN):
         return self.model.predict(x)
 
 
+def build_pretrain_modle_resnet50(num_classes = 10, freeze_layers = 2):
+    # FREEZE_LAYERS = 2
+
+    base_model = ResNet50(weights='imagenet', include_top=False, classes=num_classes)
+
+    x = base_model.output
+    # x = Flatten()(x)
+    # x = Dropout(0.5)(x)
+    # pred = Dense(10, activation='softmax')(x)
+    #
+    # model = Model(inputs=base_model.input, outputs=pred)
+
+    x = GlobalAveragePooling2D()(x)
+    # x = Dense(1024, activation='relu')(x)
+    x = Dense(64, activation='relu')(x)
+
+    pred = Dense(num_classes, activation='softmax')(x)
+
+    model = Model(inputs=base_model.input, outputs=pred)
+
+    for layer in model.layers[:freeze_layers]:
+        layer.trainable = False
+
+    for layer in model.layers[freeze_layers:]:
+        layer.trainable = True
+
+    return model
+
+
+    # model = keras.Sequential()
+    # model.add(
+    #     ResNet50(include_top=False, weights='imagenet',input_tensor=None)
+    # )
+    # model.add(Flatten())
+    # model.add(Dropout(0.5))
+    # # model.add(Dense())
+    # model.add(Dense(num_classes))
+    # model.add(Activation('softmax'))
+
+
+def build_pretrain_model_mobilenetv2(num_classes = 10, freeze_layers = 2):
+    # FREEZE_LAYERS = 2
+
+    # base_model = ResNet50(weights='imagenet', include_top=False, classes=num_classes)
+    base_model = MobileNetV2(weights='imagenet', include_top=False, classes=num_classes)
+
+    x = base_model.output
+    # x = Flatten()(x)
+    # x = Dropout(0.5)(x)
+    # pred = Dense(10, activation='softmax')(x)
+    #
+    # model = Model(inputs=base_model.input, outputs=pred)
+
+    x = GlobalAveragePooling2D()(x)
+    # x = Dense(1024, activation='relu')(x)
+    x = Dense(64, activation='relu')(x)
+
+    pred = Dense(num_classes, activation='softmax')(x)
+
+    model = Model(inputs=base_model.input, outputs=pred)
+
+    for layer in model.layers[:freeze_layers]:
+        layer.trainable = False
+
+    for layer in model.layers[freeze_layers:]:
+        layer.trainable = True
+
+    return model
+
+
+
 def test_Keras_nn():
 
     # 数据初始化
@@ -271,11 +413,11 @@ def test_Keras_nn():
     x_train = (x_train.astype('float32') - 127.5) / 127.5
     x_test = (x_test.astype('float32') - 127.5) / 127.5
 
-    x_train = x_train[:128,:,:,:]
-    y_train = y_train[:128]
-
-    x_test = x_train[:64, :, :, :]
-    y_test = y_train[:64]
+    # x_train = x_train[:128,:,:,:]
+    # y_train = y_train[:128]
+    #
+    # x_test = x_train[:64, :, :, :]
+    # y_test = y_train[:64]
 
     y_train = keras.utils.to_categorical(y_train, num_classes)
     y_test = keras.utils.to_categorical(y_test, num_classes)
@@ -297,27 +439,33 @@ def test_Keras_nn():
 
     k = keras_nn()
 
-    k.build_model(myModel)
+    best_model_path = 'd:/mobilev2_weight.best.hdf5'
+    # k.build_model(myModel)
+    if os.path.exists(best_model_path):
+        k.restore(load_file_path=best_model_path)
+    else:
+        k.build_model(build_pretrain_model_mobilenetv2)
+
 
     k.add_callback(
         MyCallBack(
             val_set=(x_test,y_test),
             nn=k,
-            filepath='d:/model2/zjz_weight.best.hdf5',
+            filepath=best_model_path,
             period=2,
             strategy='save_if_improve',
         )
     )
 
-    k.add_callback(
-        MyCallBack(
-            val_set=(x_test, y_test),
-            nn=k,
-            filepath='d:/model2/zjz_weight.{epoch:02d}.{val_acc:.2f}.hdf5',
-            period=2,
-            strategy='save_every_time',
-        )
-    )
+    # k.add_callback(
+    #     MyCallBack(
+    #         val_set=(x_test, y_test),
+    #         nn=k,
+    #         filepath='d:/model2/zjz_weight.{epoch:02d}.{val_acc:.2f}.hdf5',
+    #         period=2,
+    #         strategy='save_every_time',
+    #     )
+    # )
 
     k.add_callback(
         keras.callbacks.TensorBoard(
@@ -327,7 +475,16 @@ def test_Keras_nn():
             write_images=True)
     )
 
+    k.add_callback(
+        lr_scheduler
+    )
+
     k.summary()
+    model_json = k.model.to_json()
+    with open(r'd:/modle.json', 'w') as file:
+        file.write(model_json)
+    plot_model(k.model, to_file='d:/modle.png', show_shapes=True, show_layer_names=True)
+
 
     k.model.compile(optimizer=SGD(1e-5), loss='categorical_crossentropy', metrics=['categorical_accuracy'])
 
